@@ -1,0 +1,224 @@
+<div class="shell">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand__mark">CG</span>
+      <div>
+        <h1>CEGAFI · Catálogo Edocampo</h1>
+        <p class="brand__sub">
+          @if (result(); as data) {
+            {{ data.source }} · coletado em {{ formatDateTime(data.scrapedAt) }}
+          } @else {
+            Painel de produtos coletados pelo scraper
+          }
+        </p>
+      </div>
+    </div>
+
+    <button class="btn btn--primary" type="button" (click)="load()" [disabled]="loading()">
+      @if (loading()) {
+        Coletando…
+      } @else {
+        Atualizar coleta
+      }
+    </button>
+  </header>
+
+  @if (error(); as message) {
+    <div class="alert" role="alert">
+      <strong>Falha na coleta.</strong>
+      <span>{{ message }}</span>
+      <button class="btn btn--ghost" type="button" (click)="load()">Tentar novamente</button>
+    </div>
+  }
+
+  @if (loading() && !result()) {
+    <section class="grid" aria-label="Carregando produtos">
+      @for (skeleton of [1, 2, 3, 4, 5, 6, 7, 8]; track skeleton) {
+        <article class="card card--skeleton">
+          <div class="skeleton skeleton--media"></div>
+          <div class="skeleton skeleton--line"></div>
+          <div class="skeleton skeleton--line skeleton--short"></div>
+        </article>
+      }
+    </section>
+  }
+
+  @if (result()) {
+    <section class="kpis" aria-label="Indicadores">
+      <article class="kpi">
+        <span class="kpi__label">Produtos</span>
+        <strong class="kpi__value">{{ formatNumber(stats().total) }}</strong>
+        <span class="kpi__hint">de {{ formatNumber(result()!.total) }} coletados</span>
+      </article>
+      <article class="kpi">
+        <span class="kpi__label">Disponíveis</span>
+        <strong class="kpi__value">{{ formatNumber(stats().available) }}</strong>
+        <span class="kpi__hint"
+          >{{ formatNumber(stats().total - stats().available) }} indisponíveis</span
+        >
+      </article>
+      <article class="kpi">
+        <span class="kpi__label">Preço médio</span>
+        <strong class="kpi__value">{{ formatCurrency(stats().averagePrice) }}</strong>
+        <span class="kpi__hint">
+          {{ formatCurrency(stats().minPrice) }} — {{ formatCurrency(stats().maxPrice) }}
+        </span>
+      </article>
+      <article class="kpi">
+        <span class="kpi__label">Em promoção</span>
+        <strong class="kpi__value">{{ formatNumber(stats().discounted) }}</strong>
+        <span class="kpi__hint">com preço de tabela maior</span>
+      </article>
+      <article class="kpi">
+        <span class="kpi__label">Marcas</span>
+        <strong class="kpi__value">{{ formatNumber(stats().brands) }}</strong>
+        <span class="kpi__hint">{{ formatNumber(stats().sellers) }} vendedores</span>
+      </article>
+    </section>
+
+    <section class="panel" aria-label="Distribuição por marca">
+      <h2 class="panel__title">Marcas com mais itens</h2>
+      @if (topBrands().length) {
+        <ul class="bars">
+          @for (entry of topBrands(); track entry.name) {
+            <li class="bar">
+              <span class="bar__label" [title]="entry.name">{{ entry.name }}</span>
+              <span class="bar__track"
+                ><span class="bar__fill" [style.width.%]="entry.share"></span
+              ></span>
+              <span class="bar__value">{{ formatNumber(entry.count) }}</span>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="empty-inline">Nenhum produto no filtro atual.</p>
+      }
+    </section>
+
+    <section class="filters" aria-label="Filtros">
+      <label class="field field--grow">
+        <span class="field__label">Buscar</span>
+        <input
+          type="search"
+          placeholder="Nome, marca, vendedor ou SKU"
+          [ngModel]="search()"
+          (ngModelChange)="search.set($event)"
+        />
+      </label>
+
+      <label class="field">
+        <span class="field__label">Marca</span>
+        <select [ngModel]="brand()" (ngModelChange)="brand.set($event)">
+          <option value="">Todas</option>
+          @for (option of brands(); track option) {
+            <option [value]="option">{{ option }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="field">
+        <span class="field__label">Vendedor</span>
+        <select [ngModel]="seller()" (ngModelChange)="seller.set($event)">
+          <option value="">Todos</option>
+          @for (option of sellers(); track option) {
+            <option [value]="option">{{ option }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="field">
+        <span class="field__label">Ordenar por</span>
+        <select [ngModel]="sort()" (ngModelChange)="sort.set($event)">
+          <option value="relevance">Ordem da coleta</option>
+          <option value="price-asc">Menor preço</option>
+          <option value="price-desc">Maior preço</option>
+          <option value="discount">Maior desconto</option>
+          <option value="name">Nome (A–Z)</option>
+        </select>
+      </label>
+
+      <div class="toggles">
+        <label class="toggle">
+          <input
+            type="checkbox"
+            [ngModel]="onlyAvailable()"
+            (ngModelChange)="onlyAvailable.set($event)"
+          />
+          <span>Só disponíveis</span>
+        </label>
+        <label class="toggle">
+          <input
+            type="checkbox"
+            [ngModel]="onlyDiscounted()"
+            (ngModelChange)="onlyDiscounted.set($event)"
+          />
+          <span>Só promoções</span>
+        </label>
+        @if (hasActiveFilters()) {
+          <button class="btn btn--ghost" type="button" (click)="clearFilters()">Limpar</button>
+        }
+      </div>
+    </section>
+
+    @if (filtered().length) {
+      <section class="grid" aria-label="Produtos">
+        @for (product of filtered(); track product.skuId) {
+          <article class="card" [class.card--off]="!product.available">
+            <div class="card__media">
+              @if (product.imageUrl) {
+                <img [src]="product.imageUrl" [alt]="product.name" loading="lazy" />
+              } @else {
+                <span class="card__placeholder">{{ initials(product) }}</span>
+              }
+              @if (discount(product); as off) {
+                <span class="badge badge--sale">-{{ off.toFixed(0) }}%</span>
+              }
+              @if (!product.available) {
+                <span class="badge badge--off">Indisponível</span>
+              }
+            </div>
+
+            <div class="card__body">
+              @if (product.brand) {
+                <span class="card__brand">{{ product.brand }}</span>
+              }
+              <h3 class="card__name" [title]="product.name">{{ product.name }}</h3>
+
+              <div class="card__prices">
+                <strong class="card__price">{{ formatCurrency(product.price) }}</strong>
+                @if (discount(product)) {
+                  <s class="card__list-price">{{ formatCurrency(product.listPrice) }}</s>
+                }
+              </div>
+
+              <dl class="card__meta">
+                <div>
+                  <dt>Vendedor</dt>
+                  <dd>{{ product.seller ?? '—' }}</dd>
+                </div>
+                <div>
+                  <dt>SKU</dt>
+                  <dd>{{ product.skuId }}</dd>
+                </div>
+              </dl>
+            </div>
+
+            <a class="card__link" [href]="product.url" target="_blank" rel="noopener noreferrer">
+              Ver na loja
+            </a>
+          </article>
+        }
+      </section>
+    } @else if (!loading()) {
+      <section class="empty">
+        <h2>Nenhum produto encontrado</h2>
+        <p>Ajuste a busca ou remova os filtros aplicados.</p>
+        @if (hasActiveFilters()) {
+          <button class="btn btn--primary" type="button" (click)="clearFilters()">
+            Limpar filtros
+          </button>
+        }
+      </section>
+    }
+  }
+</div>
